@@ -1,8 +1,8 @@
-/**
- * Insertion.hpp
- * created on : August 2023
- * author : Z.LEI
- **/
+
+
+
+
+
 
 #ifndef MA_FIRD_INSERTION_HPP
 #define MA_FIRD_INSERTION_HPP
@@ -27,6 +27,7 @@ private:
     void infeasibleBestInsert(std::vector<Route*> &routes, std::vector<Node*> &nodes);
     void feasibleRegretInsert(std::vector<Route*> &routes, std::vector<Node*> &nodes);
     void infeasibleRegretInsert(std::vector<Route*> &routes, std::vector<Node*> &nodes);
+    void ejectionInsert(std::vector<Route*> &routes, std::vector<Node*> &nodes);
 public:
     Insertion() = default;
     ~Insertion() = default;
@@ -35,4 +36,4 @@ public:
 };
 
 
-#endif //MA_FIRD_INSERTION_HPP
+#endif

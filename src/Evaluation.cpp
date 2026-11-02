@@ -1,8 +1,8 @@
-/**
- * Evaluation.cpp
- * created on : September 2023
- * author : Z.LEI
- **/
+
+
+
+
+
 
 #include "Evaluation.hpp"
 
@@ -31,9 +31,9 @@ EvalElem::EvalElem(Route *route, int start_idx, int end_idx) {
 
 EvalElem EvalElem::add(EvalElem &ee, double dist, double time_dist) const {
     EvalElem res;
-    // cost
+
     res.cost = cost + dist + ee.cost;
-    // time windows
+
     double td = duration_time + wait_time + time_dist - reverse_time;
     double wt = std::max(ee.open_time - td - close_time, 0.0);
     double rt = std::max(open_time + td - ee.close_time, 0.0);
@@ -42,7 +42,7 @@ EvalElem EvalElem::add(EvalElem &ee, double dist, double time_dist) const {
     res.close_time = std::min(close_time, ee.close_time - td) + rt;
     res.reverse_time = reverse_time + rt + ee.reverse_time;
     res.wait_time = wait_time + wt + ee.wait_time;
-    // capacity
+
     res.in_load = in_load + ee.in_load;
     res.out_load = out_load + ee.out_load;
     res.max_load = std::max(max_load + ee.in_load, out_load + ee.max_load);

@@ -1,14 +1,17 @@
-/**
- * Parameters.cpp
- * created on : August 2023
- * author : Z.LEI
- **/
+
+
+
+
+
 
 #include "Parameters.hpp"
+#include <vector>
 
 Parameters::Parameters(int argc, char **argv) {
     std::random_device rand_dev;
     cmdline::parser parser;
+    parser.set_program_name("DBLS-SP");
+    parser.add("help", 'h', "show DBLS-SP options (-help is also accepted)");
     parser.add<std::string>("dataset_dir", 0, "datasets dir", false, "");
     parser.add<std::string>("output_dir", 0, "output dir", false, "");
     parser.add<int>("datasets", 'D', "datasets index", false, DATASETS_INDEX);
@@ -23,9 +26,18 @@ Parameters::Parameters(int argc, char **argv) {
     parser.add<double>("init_ratio", 'r', "init ratio for ARIX", false, INIT_RATIO);
     parser.add<double>("fit_coef", 'y', "fitness coefficient", false, FIT_COEF);
     parser.add<double>("adjust_factor", 'u', "adjust factor", false, ADJUST_FACTOR);
-    parser.add<bool>("enable_tabu", 0, "enable tabu", false, TABU_ENABLED);
-    parser.add<int>("tabu_tenure_max", 0, "max tabu tenure", false, TABU_TENURE_MAX);
-    parser.parse_check(argc, argv);
+    parser.add("repair_score", 0, "use repair score mode for infeasible solutions");
+    parser.add("mab_ratio", 0, "select ARIX ratio with MAB");
+    parser.add("ejection_insertion", 0, "use depth-1 ejection insertion before the selected insertion operator");
+    parser.add("vla_archive", 0, "use vehicle-layer archive guided search after stagnation");
+    parser.add("qf_nnr", 0, "use quality-first nearest-neighbor population replacement");
+    std::vector<std::string> args(argv, argv + argc);
+    for (size_t i = 1; i < args.size(); ++i) {
+        if (args[i] == "-help" || args[i] == "-?") {
+            args[i] = "--help";
+        }
+    }
+    parser.parse_check(args);
 
     this->datasets_index = parser.get<int>("datasets");
     this->instance_index = parser.get<int>("instance");
@@ -60,8 +72,11 @@ Parameters::Parameters(int argc, char **argv) {
     this->population_size = parser.get<int>("population_size");
     this->fit_coef = parser.get<double>("fit_coef");
     this->adjust_factor = parser.get<double>("adjust_factor");
-    this->enable_tabu = parser.get<bool>("enable_tabu");
-    this->tabu_tenure_max = parser.get<int>("tabu_tenure_max");
+    this->repair_score = parser.exist("repair_score");
+    this->mab_ratio = parser.exist("mab_ratio");
+    this->ejection_insertion = parser.exist("ejection_insertion");
+    this->vla_archive = parser.exist("vla_archive");
+    this->qf_nnr = parser.exist("qf_nnr");
 }
 
 void Parameters::print() const {
@@ -80,8 +95,11 @@ void Parameters::print() const {
                 << " fit_coef: " << fit_coef
                 << " init_ratio: " << init_ratio
                 << " adjust_factor: " << adjust_factor
-                << " enable_tabu: " << (enable_tabu ? 1 : 0)
-                << " tabu_tenure_max: " << tabu_tenure_max
+                << " repair_score: " << repair_score
+                << " mab_ratio: " << mab_ratio
+                << " ejection_insertion: " << ejection_insertion
+                << " vla_archive: " << vla_archive
+                << " qf_nnr: " << qf_nnr
                 << std::endl
                 << std::endl;
 }

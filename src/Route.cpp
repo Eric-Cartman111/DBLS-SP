@@ -1,8 +1,8 @@
-/**
- * Route.cpp
- * created on : August 2023
- * author : Z.LEI
- **/
+
+
+
+
+
 
 #include "Route.hpp"
 
@@ -93,7 +93,7 @@ void Route::update() {
         p = p->next;
     }
 
-    // p = head
+
     p->load = delivery_sum;
     p->cap_feasible = p->load <= data->capacity;
     max_load = p->load;
@@ -124,7 +124,7 @@ void Route::update() {
         size++;
         p = p->next;
     }
-    // p = head
+
     p->arrive_time = p->prev->departure_time + data->time_distances[p->prev->id][p->id];
     p->wait_time = 0;
     if (p->arrive_time <= p->close_time) {
@@ -145,7 +145,7 @@ void Route::update() {
 
 
 void Route::updateMatrix() {
-    // clear all matrix
+
     cost_matrix.clear();
     in_load_matrix.clear();
     out_load_matrix.clear();
@@ -155,7 +155,7 @@ void Route::updateMatrix() {
     duration_time_matrix.clear();
     wait_time_matrix.clear();
     reverse_time_matrix.clear();
-    // resize all matrix
+
     cost_matrix.resize(size + 1, std::vector<double>(size + 1));
     in_load_matrix.resize(size + 1, std::vector<double>(size + 1));
     out_load_matrix.resize(size + 1, std::vector<double>(size + 1));

@@ -1,8 +1,8 @@
-/**
- * Searcher.cpp
- * created on : August 2023
- * author : Z.LEI
- **/
+
+
+
+
+
 
 #include "Searcher.hpp"
 
@@ -42,7 +42,7 @@ Solution *Searcher::FIRD(Solution *solution) {
     auto t1 = std::chrono::high_resolution_clock::now();
 
     if (!solution->feasible) {
-        // Repair if the solution is not feasible
+
         solution = FIS(solution, best_solution);
         if (solution->betterThan(best_solution)) {
             delete best_solution;
@@ -51,7 +51,7 @@ Solution *Searcher::FIRD(Solution *solution) {
     }
 
     while (solution->feasible) {
-        // Decrease the route and check feasibility
+
         solution->decreaseRoute();
         if (solution->nb_vehicle < data->min_vehicles) {
             solution->feasible = false;
@@ -59,11 +59,11 @@ Solution *Searcher::FIRD(Solution *solution) {
         }
 
         if (solution->betterThan(best_solution)) {
-            // Update the best solution if the current solution is better
+
             delete best_solution;
             best_solution = new Solution(*solution);
         } else {
-            // Repair and update the best solution if the repaired solution is better
+
             solution = FIS(solution, best_solution);
             if (solution->betterThan(best_solution)) {
                 delete best_solution;
@@ -81,23 +81,20 @@ Solution *Searcher::FIRD(Solution *solution) {
 }
 
 Solution *Searcher::FIS(Solution *solution, Solution *objective) {
-    data->resetPenalties();
-    data->resetViolationCounts();
     opt.init(solution->feasible);
     auto *best_solution = new Solution(*solution);
     bool improved = true;
-    int step = 0, stagnation = 0, patience = 500;
-    while (improved && stagnation < patience && solution->nb_vehicle >= data->min_vehicles) {
+    int step = 0, stagnation = 0, patience = 10000, no_improve_limit = 2;
+    while ((improved || (!improved && no_improve_limit > 0)) && stagnation < patience && solution->nb_vehicle >= data->min_vehicles) {
         improved = false;
+        opt.updateScoreBalance(solution, step, stagnation, patience);
         auto actions = random->randomInts(neighborhoods.size());
         for (auto &action : actions) {
-            EvalResult res = opt.operate(solution, neighborhoods[action]);
+            double objective_cost = objective == nullptr ? INF : objective->total_cost;
+            EvalResult res = opt.operate(solution, neighborhoods[action], objective_cost);
             improved = res.accepted;
             if (objective != nullptr && solution->betterThan(objective)) {
                 delete best_solution;
-                solution->removeLeastViolationsAndReinsert(0.2);
-                data->resetPenalties();
-                data->resetViolationCounts();
                 return solution;
             }
             if (solution->betterThan(best_solution)) {
@@ -110,12 +107,11 @@ Solution *Searcher::FIS(Solution *solution, Solution *objective) {
             step++;
             if (improved) break;
         }
+        if(!improved) opt.init(solution->feasible), no_improve_limit--;
         opt.update(solution);
     }
 
-    best_solution->removeLeastViolationsAndReinsert(0.2);
-    data->resetPenalties();
-    data->resetViolationCounts();
+
 
     delete solution;
     return best_solution;

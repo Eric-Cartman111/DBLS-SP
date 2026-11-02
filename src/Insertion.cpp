@@ -1,8 +1,8 @@
-/**
- * Insertion.cpp
- * created on : August 2023
- * author : Z.LEI
- **/
+
+
+
+
+
 
 #include "Insertion.hpp"
 
@@ -17,6 +17,9 @@ void Insertion::setContext(Random *_random, Parameters *_params, Data *_data) {
 }
 
 void Insertion::run(std::vector<Route*> &routes, std::vector<Node*> &nodes, int opt) {
+    if (params->ejection_insertion) {
+        ejectionInsert(routes, nodes);
+    }
     switch (opt) {
         case 0:
             feasibleBestInsert(routes, nodes);
@@ -36,6 +39,131 @@ void Insertion::run(std::vector<Route*> &routes, std::vector<Node*> &nodes, int 
         default:
             std::cerr << "[ERROR] invalid insertion operator" << std::endl;
             exit(1);
+    }
+}
+
+void Insertion::ejectionInsert(std::vector<Route *> &routes, std::vector<Node *> &nodes) {
+    auto getCustomers = [](Route *route) {
+        std::vector<Node*> customers;
+        for (int i = 1; i < route->nodes.size(); ++i) {
+            customers.emplace_back(route->nodes[i]);
+        }
+        return customers;
+    };
+    auto evaluate = [this](Route *route, const std::vector<Node*> &customers) {
+        EvalElem result(route->head);
+        Node *prev = route->head;
+        for (auto *customer : customers) {
+            EvalElem elem(customer);
+            result = result.add(elem, data->distances[prev->id][customer->id],
+                    data->time_distances[prev->id][customer->id]);
+            prev = customer;
+        }
+        EvalElem depot(route->head);
+        return result.add(depot, data->distances[prev->id][route->head->id],
+                data->time_distances[prev->id][route->head->id]);
+    };
+    auto score = [this](const EvalElem &elem) {
+        double overload = std::max(elem.max_load - data->capacity, 0.0);
+        return elem.cost + elem.reverse_time * data->dist_time_ratio +
+                overload * data->std_dist_delta / data->capacity;
+    };
+    auto feasible = [this](const EvalElem &elem) {
+        return elem.reverse_time < PRECISION && elem.max_load - data->capacity < PRECISION;
+    };
+
+    struct DirectPlan {
+        Route *route = nullptr;
+        Node *prev = nullptr;
+        double delta = INF;
+        bool feasible = false;
+    };
+    struct EjectionPlan {
+        Route *target = nullptr;
+        Route *destination = nullptr;
+        Node *victim = nullptr;
+        Node *target_prev = nullptr;
+        Node *destination_prev = nullptr;
+        double delta = INF;
+    };
+
+    for (auto node_it = nodes.begin(); node_it != nodes.end();) {
+        Node *node = *node_it;
+        DirectPlan direct;
+        for (auto *route : routes) {
+            auto customers = getCustomers(route);
+            double old_score = score(evaluate(route, customers));
+            for (int pos = 0; pos <= customers.size(); ++pos) {
+                auto inserted = customers;
+                inserted.insert(inserted.begin() + pos, node);
+                auto elem = evaluate(route, inserted);
+                double delta = score(elem) - old_score;
+                if (delta < direct.delta) {
+                    direct.route = route;
+                    direct.prev = pos == 0 ? route->head : customers[pos - 1];
+                    direct.delta = delta;
+                    direct.feasible = feasible(elem);
+                }
+            }
+        }
+
+        if (direct.feasible) {
+            direct.route->insert(direct.prev, node);
+            direct.route->update();
+            node_it = nodes.erase(node_it);
+            continue;
+        }
+
+        EjectionPlan best;
+        for (auto *target : routes) {
+            auto target_customers = getCustomers(target);
+            double old_target_score = score(evaluate(target, target_customers));
+            for (auto *victim : target_customers) {
+                auto reduced = target_customers;
+                reduced.erase(std::remove(reduced.begin(), reduced.end(), victim), reduced.end());
+                for (int target_pos = 0; target_pos <= reduced.size(); ++target_pos) {
+                    auto inserted = reduced;
+                    inserted.insert(inserted.begin() + target_pos, node);
+                    auto target_elem = evaluate(target, inserted);
+                    if (!feasible(target_elem)) continue;
+
+                    for (auto *destination : routes) {
+                        if (destination == target) continue;
+                        auto destination_customers = getCustomers(destination);
+                        double old_destination_score = score(evaluate(destination, destination_customers));
+                        for (int destination_pos = 0; destination_pos <= destination_customers.size(); ++destination_pos) {
+                            auto relocated = destination_customers;
+                            relocated.insert(relocated.begin() + destination_pos, victim);
+                            auto destination_elem = evaluate(destination, relocated);
+                            if (!feasible(destination_elem)) continue;
+
+                            double delta = score(target_elem) - old_target_score +
+                                    score(destination_elem) - old_destination_score;
+                            if (delta < best.delta) {
+                                best.target = target;
+                                best.destination = destination;
+                                best.victim = victim;
+                                best.target_prev = target_pos == 0 ? target->head : reduced[target_pos - 1];
+                                best.destination_prev = destination_pos == 0 ? destination->head :
+                                        destination_customers[destination_pos - 1];
+                                best.delta = delta;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (best.target != nullptr && best.delta < direct.delta) {
+            best.target->remove(best.victim);
+            best.target->insert(best.target_prev, node);
+            best.destination->insert(best.destination_prev, best.victim);
+            best.target->update();
+            best.destination->update();
+            node_it = nodes.erase(node_it);
+        } else {
+            ++node_it;
+        }
     }
 }
 
@@ -75,7 +203,7 @@ void Insertion::feasibleBestInsert(std::vector<Route*> &routes, std::vector<Node
             }
         }
         if (best_route == nullptr) {
-            // creat new route
+
             best_route = new Route(data->depot);
             best_route->update();
             routes.emplace_back(best_route);
@@ -84,7 +212,7 @@ void Insertion::feasibleBestInsert(std::vector<Route*> &routes, std::vector<Node
         best_route->insert(best_pos, node);
         best_route->update();
     }
-    // update route ids
+
     for (int i = 0; i < routes.size(); ++i) {
         routes[i]->id = i + 1;
     }
@@ -106,12 +234,8 @@ void Insertion::infeasibleBestInsert(std::vector<Route*> &routes, std::vector<No
                 double cost_delta = ee.cost - routes[j]->cost;
                 double twp_delta = ee.reverse_time - routes[j]->reverse_time;
                 double ccp_delta = std::max(ee.max_load - data->capacity, 0.0) - routes[j]->overload;
-                double penalty = data->penaltyFor(node->id);
-                double v1 = std::max(twp_delta, 0.0);
-                if (v1 > 0) v1 += penalty;
-                double v2 = std::max(ccp_delta, 0.0);
-                if (v2 > 0) v2 += penalty;
-                double score = cost_delta + data->dist_time_ratio * v1 + data->std_dist_delta * v2 / data->capacity;
+                double w1 = 1000, w2 = 1000;
+                double score = cost_delta + w1 * twp_delta * data->dist_time_ratio + w2 * ccp_delta * data->std_dist_delta / data->capacity;
                 if (score < best_score) {
                     best_score = score;
                     best_route = routes[j];
@@ -126,11 +250,6 @@ void Insertion::infeasibleBestInsert(std::vector<Route*> &routes, std::vector<No
 }
 
 void Insertion::infeasibleRegretInsert(std::vector<Route*> &routes, std::vector<Node *> &nodes) {
-    if (routes.empty()) {
-        auto route = new Route(data->depot);
-        route->update();
-        routes.emplace_back(route);
-    }
     while (!nodes.empty()) {
         double best_regret = -INF;
         Route *best_route = nullptr;
@@ -148,12 +267,8 @@ void Insertion::infeasibleRegretInsert(std::vector<Route*> &routes, std::vector<
                     double cost_delta = ee.cost - routes[j]->cost;
                     double twp_delta = ee.reverse_time - routes[j]->reverse_time;
                     double ccp_delta = std::max(ee.max_load - data->capacity, 0.0) - routes[j]->overload;
-                    double penalty = data->penaltyFor(node->id);
-                    double v1 = std::max(twp_delta, 0.0);
-                    if (v1 > 0) v1 += penalty;
-                    double v2 = std::max(ccp_delta, 0.0);
-                    if (v2 > 0) v2 += penalty;
-                    double score = cost_delta + data->dist_time_ratio * v1 + data->std_dist_delta * v2 / data->capacity;
+                    double w1 = 1000, w2 = 1000;
+                    double score = cost_delta + w1 * twp_delta * data->dist_time_ratio + w2 * ccp_delta * data->std_dist_delta / data->capacity;
 
                     if (score < std::get<2>(route_best_scores[j])) {
                         std::get<0>(route_best_scores[j]) = j;
@@ -208,7 +323,7 @@ void Insertion::feasibleRegretInsert(std::vector<Route*> &routes, std::vector<No
                     p = p->next;
                 }
             }
-            // calculate the score for inserting into new route
+
             double score = data->distances[0][node->id] + data->distances[node->id][0];
             std::get<0>(route_best_scores[0]) = 0;
             std::get<1>(route_best_scores[0]) = nullptr;
@@ -233,7 +348,7 @@ void Insertion::feasibleRegretInsert(std::vector<Route*> &routes, std::vector<No
             }
         }
         if (best_route == nullptr) {
-            // creat new route
+
             best_route = new Route(data->depot);
             best_route->update();
             routes.emplace_back(best_route);
@@ -243,7 +358,7 @@ void Insertion::feasibleRegretInsert(std::vector<Route*> &routes, std::vector<No
         best_route->update();
         nodes.erase(std::remove(nodes.begin(), nodes.end(), best_node), nodes.end());
     }
-    // update route ids
+
     for (int i = 0; i < routes.size(); ++i) {
         routes[i]->id = i + 1;
     }

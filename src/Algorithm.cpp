@@ -1,10 +1,11 @@
-/**
- * Algorithm.cpp
- * created on : August 2023
- * author : Z.LEI
- **/
+
+
+
+
+
 
 #include "Algorithm.hpp"
+#include <iomanip>
 
 Algorithm::Algorithm(Parameters *params) {
     this->params = params;
@@ -14,10 +15,6 @@ Algorithm::Algorithm(Parameters *params) {
 }
 
 Algorithm::~Algorithm() {
-    for (auto *sol : initial_solutions) {
-        delete sol;
-    }
-    initial_solutions.clear();
     delete params;
     delete random;
     delete data;
@@ -25,31 +22,22 @@ Algorithm::~Algorithm() {
 }
 
 void Algorithm::setContext() {
-    Searcher::setContext(random, params, data);
+    Population::setContext(random, params, data);
     Solution::setContext(random, params, data);
     Route::setContext(random, params, data);
 }
 
 void Algorithm::run() {
+
     data->read();
     this->setContext();
-    // start
+
     auto start = std::chrono::high_resolution_clock::now();
-    // initial solutions
-    int init_trials = 10;
-    Solution *best_init = nullptr;
-    for (int i = 0; i < init_trials; ++i) {
-        auto candidate = new Solution();
-        candidate->init();
-        candidate = searcher.FIRD(candidate);
-        initial_solutions.emplace_back(candidate);
-        if (candidate->betterThan(best_init)) {
-            best_init = candidate;
-        }
-    }
-    best_solution = new Solution(*best_init);
+
+    population.init();
+    best_solution = new Solution(*population.best_solution);
     if (LOG_LEVEL > 0) best_solution->write(0);
-    // iteration
+
     int iter = 0, best_iter = 0, stagnation = 0;
     double best_touch_time = 0, running_time = 0;
     while (iter++ < params->max_iterations &&
@@ -57,8 +45,11 @@ void Algorithm::run() {
         running_time < params->max_running_time
     ) {
         auto start_iter = std::chrono::high_resolution_clock::now();
-        auto new_solution = new Solution(*best_solution);
-        new_solution = searcher.FIRD(new_solution);
+
+        bool use_archive_guided = params->vla_archive &&
+                stagnation >= std::max(1, params->patience / 2);
+        population.next(use_archive_guided);
+        auto new_solution = population.best_solution;
         auto end_iter = std::chrono::high_resolution_clock::now();
         running_time = std::chrono::duration<double> (end_iter - start).count();
 
@@ -72,8 +63,6 @@ void Algorithm::run() {
         } else {
             stagnation++;
         }
-
-        delete new_solution;
 
         std::cout << "[LOG]"
                   << " iter: " << iter
@@ -100,6 +89,5 @@ void Algorithm::run() {
               << " best_touch_time: " << best_touch_time
               << " solution_file: " << params->filename + "-" + params->timestamp + "-"+ std::to_string(best_iter)
               << std::endl << std::endl;
-
 }
 

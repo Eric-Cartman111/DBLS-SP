@@ -1,8 +1,8 @@
-/**
- * Searcher.hpp
- * created on : August 2023
- * author : Z.LEI
- **/
+
+
+
+
+
 
 #ifndef MA_FIRD_SEARCHER_HPP
 #define MA_FIRD_SEARCHER_HPP
@@ -32,4 +32,4 @@ public:
     Solution *FIS(Solution *solution, Solution *objective);
 };
 
-#endif //MA_FIRD_SEARCHER_HPP
+#endif

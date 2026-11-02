@@ -1,8 +1,8 @@
-/**
- * RLAgent.cpp
- * created on : August 2023
- * author : Z.LEI
- **/
+
+
+
+
+
 
 #include "RLAgent.hpp"
 
@@ -24,6 +24,15 @@ void RLAgent::init(int _num_actions, int _num_states) {
 int RLAgent::selectAction(int state) {
     auto values = q_values[state];
     auto ucb_values = std::vector<double>(values.size(), 0.0);
+    std::vector<int> untried_actions;
+    for (int i = 0; i < values.size(); i++) {
+        if (counts[i] == 0) {
+            untried_actions.emplace_back(i);
+        }
+    }
+    if (!untried_actions.empty()) {
+        return untried_actions[random->randomInt(untried_actions.size())];
+    }
     for (int i = 0; i < values.size(); i++) {
         ucb_values[i] = values[i] + std::sqrt(2 * std::log(count_sum) / counts[i] + PRECISION);
     }

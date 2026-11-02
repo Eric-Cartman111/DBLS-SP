@@ -1,8 +1,8 @@
-/**
- * Data.cpp
- * created on : August 2023
- * author : Z.LEI
- **/
+
+
+
+
+
 
 #include "Data.hpp"
 
@@ -42,7 +42,7 @@ void Data::read() {
                 ++line_id;
             }
             depot = nodes[0];
-        } else if (dataset.front() == 'J'|| dataset.front() == 'L') {
+        } else if (dataset.front() == 'J') {
             file.open(data_dir + filename + ".vrpsdptw");
             while (std::getline(file, line)) {
                 std::istringstream iss(line);
@@ -112,6 +112,9 @@ void Data::read() {
                 }
             }
             depot = nodes[0];
+            for (int i = 1; i < nb_customers + 1; i++) {
+                nodes[i].open_time = std::max(nodes[i].open_time, nodes[0].open_time + time_distances[0][i]);
+            }
         } else {
             std::cerr << "[ERROR] dataset not supported" << std::endl;
             exit(1);
@@ -121,47 +124,28 @@ void Data::read() {
         std::cerr << "[ERROR] read instance error" << std::endl;
     }
     preprocessing();
-    resetPenalties();
-    resetViolationCounts();
-}
-
-void Data::resetPenalties() {
-    penalty_values.assign(nb_customers + 1, 0.0);
-}
-
-void Data::resetViolationCounts() {
-    violation_counts.assign(nb_customers + 1, 0);
-}
-
-void Data::recordViolation(int id) {
-    if (id <= 0 || id >= violation_counts.size()) return;
-    violation_counts[id] += 1;
-    penalty_values[id] += 1.0;
-}
-
-double Data::penaltyFor(int id) const {
-    if (id <= 0 || id >= penalty_values.size()) return 0.0;
-    return penalty_values[id];
 }
 
 void Data::preprocessing() {
     calculateDistance();
     calculateFeasibility();
 
-    // calculate the sum of delivery and pickup
+
     for (int i = 1; i < nb_customers + 1; i++) {
         delivery_sum += nodes[i].delivery;
         pickup_sum += nodes[i].pickup;
     }
 
     dist_time_ratio = sum_distance / sum_time_distance;
-    std_dist_delta = 2 * max_distance - min_distance;
+    std_dist_delta = 2 * (max_distance - min_distance);
+    printf("%d customers, max vehicles %d, capacity %.2f, max distance %.2f, min distance %.2f, sum distance %.2f, sum time distance %.2f\n",
+           nb_customers, max_vehicles, capacity, max_distance, min_distance, sum_distance, sum_time_distance);
 
     min_vehicles = std::max(std::ceil((delivery_sum) / capacity), std::ceil((pickup_sum) / capacity));
 }
 
 void Data::calculateDistance() {
-    // calculate distance matrix
+
     if (distances.empty()) {
         distances.resize(nb_customers + 1, std::vector<double>(nb_customers + 1, 0));
         time_distances.resize(nb_customers + 1, std::vector<double>(nb_customers + 1, 0));
@@ -182,27 +166,45 @@ void Data::calculateDistance() {
                 }
             }
         }
+        for (int i = 1; i < nb_customers + 1; i++) {
+            nodes[i].open_time = std::max(nodes[i].open_time, nodes[0].open_time + time_distances[0][i]);
+        }
     }
 }
 
 void Data::calculateFeasibility() {
-    // pruning
+
     this->feasibility_matrix = std::vector<std::vector<bool>>(nodes.size(), std::vector<bool>(nodes.size(), true));
-    double tw_count = 0, cap_count = 0;
+    int tw_count = 0, cap_count = 0, total_count = 0;
     for (int i = 0; i < nb_customers + 1; ++i) {
         for (int j = 0; j < nb_customers + 1; ++j) {
             if (i != j) {
+                bool reduced_by_tw = false;
+                bool reduced_by_capacity = false;
                 if (nodes[i].open_time + nodes[i].service_time + time_distances[i][j] > nodes[j].close_time) {
-                    this->feasibility_matrix[i][j] = false;
-                    tw_count++;
+                    reduced_by_tw = true;
+                }
+                if (std::max(nodes[j].open_time, nodes[i].open_time + nodes[i].service_time + time_distances[i][j]) + nodes[j].service_time + time_distances[j][0] > nodes[0].close_time) {
+                    reduced_by_tw = true;
                 }
                 if (((nodes[i].delivery + nodes[j].delivery) > capacity) ||
                     ((nodes[i].pickup + nodes[j].delivery) > capacity) ||
                     ((nodes[i].pickup + nodes[j].pickup) > capacity)) {
+                    reduced_by_capacity = true;
+                }
+                if (reduced_by_tw || reduced_by_capacity) {
                     this->feasibility_matrix[i][j] = false;
+                    total_count++;
+                }
+                if (reduced_by_tw) {
+                    tw_count++;
+                }
+                if (reduced_by_capacity) {
                     cap_count++;
                 }
             }
         }
     }
+    printf("reduced paths by time window: %d, reduced paths by capacity: %d, total reduced paths: %d\n",
+           tw_count, cap_count, total_count);
 }

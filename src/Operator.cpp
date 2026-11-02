@@ -1,8 +1,8 @@
-/**
- * Operator.cpp
- * created on : August 2023
- * author : Z.LEI
- **/
+
+
+
+
+
 
 #include "Operator.hpp"
 
@@ -18,16 +18,12 @@ void Operator::setContext(Random *_random, Parameters *_params, Data *_data) {
 
 void Operator::init(bool flag) {
     adjust_factor = params->adjust_factor;
-    tabu_enabled = params->enable_tabu;
-    tabu_tenure_max = params->tabu_tenure_max;
-    tabu_step = 0;
-    tabu_until.clear();
     if (flag) {
-        // solution is feasible
+
         w1 = min_pr, w2 = min_pr;
 
     } else {
-        // solution is not feasible, repair
+
         w1 = max_pr, w2 = max_pr;
     }
     cost_coef = w0;
@@ -64,37 +60,30 @@ bool Operator::skip(int rid, int id1, int id2) {
     return false;
 }
 
-double Operator::getScore(double cost_delta, double time_delta, double load_delta, double penalty) const {
-    double v1 = std::max(time_delta, 0.0);
-    if (v1 > 0) {
-        v1 += penalty;
+void Operator::updateScoreBalance(Solution *solution, int round, int stagnation, int patience) {
+    if (!params->repair_score || solution->feasible) {
+        cost_coef = w0;
+        return;
     }
-    double v2 = std::max(load_delta, 0.0);
-    if (v2 > 0) {
-        v2 += penalty;
-    }
+
+    double round_progress = patience > 0 ? std::min(static_cast<double>(round) / patience, 1.0) : 1.0;
+    double stagnation_progress = patience > 0 ? std::min(static_cast<double>(stagnation) / patience, 1.0) : 1.0;
+    double repair_strength = 0.7 * round_progress + 0.3 * stagnation_progress;
+    cost_coef = w0 * (1 - (1 - repair_cost_factor) * repair_strength);
+}
+
+double Operator::getScore(double cost_delta, double time_delta, double load_delta) const {
     return cost_coef * cost_delta +
-           data->dist_time_ratio * v1 +
-           data->std_dist_delta * v2 / data->capacity;
+           time_coef * data->dist_time_ratio * time_delta +
+           load_coef * data->std_dist_delta * load_delta / data->capacity;
 }
 
-double Operator::penaltyForNode(Node *node) const {
-    if (node == nullptr) return 0.0;
-    return data->penaltyFor(node->id);
+bool Operator::exceedsObjectiveCost(Solution *solution, double cost_delta, double objective_cost, int removed_routes) {
+    double total_cost = solution->total_cost + cost_delta - removed_routes * data->dispatch_cost;
+    return total_cost > objective_cost + PRECISION;
 }
 
-double Operator::penaltyForSuperNode(const SuperNode &node) const {
-    if (node.first == nullptr || node.len <= 0) return 0.0;
-    double sum = 0.0;
-    Node *p = node.first;
-    for (int i = 0; i < node.len; ++i) {
-        sum += data->penaltyFor(p->id);
-        p = p->next;
-    }
-    return sum;
-}
-
-void Operator::_intraRelocate(Solution *solution, Route *route, int len, EvalResult &res) {
+void Operator::_intraRelocate(Solution *solution, Route *route, int len, double objective_cost, EvalResult &res) {
     auto nodes = route->nodes;
     int size = nodes.size();
     auto indices = random->randomInts(size);
@@ -114,11 +103,11 @@ void Operator::_intraRelocate(Solution *solution, Route *route, int len, EvalRes
             double time_dist4 = data->time_distances[prev_i->id][next_i->id], time_dist5 = data->time_distances[pj->id][first_i->id], time_dist6 = data->time_distances[last_i->id][next_j->id];
             EvalElem ee;
             if (i < j) {
-                // (0, i-1) (i, i+len-1) (i+len, j) (j+1, size)
+
                 EvalElem ee1 = EvalElem(route, 0, i-1), ee2 = EvalElem(route, i, i+len-1), ee3 = EvalElem(route, i+len, j), ee4 = EvalElem(route, j+1, size);
                 ee = ee1.add(ee3, dist4, time_dist4).add(ee2, dist5, time_dist5).add(ee4, dist6, time_dist6);
             } else {
-                // (0, j) (j+1, i-1) (i, i+len-1) (i+len, size)
+
                 EvalElem ee1 = EvalElem(route, 0, j), ee2 = EvalElem(route, j+1, i-1), ee3 = EvalElem(route, i, i+len-1), ee4 = EvalElem(route, i+len, size);
                 ee = ee1.add(ee3, dist5, time_dist5).add(ee2, dist6, time_dist6).add(ee4, dist4, time_dist4);
             }
@@ -127,15 +116,10 @@ void Operator::_intraRelocate(Solution *solution, Route *route, int len, EvalRes
             bool feasible = ee.reverse_time < PRECISION && overload < PRECISION;
 
             double cost_delta = ee.cost - route->cost;
+            if (exceedsObjectiveCost(solution, cost_delta, objective_cost)) continue;
             double time_delta = ee.reverse_time - route->reverse_time;
             double load_delta = overload - route->overload;
-            SuperNode sn(first_i, last_i, len);
-            double penalty = penaltyForSuperNode(sn) + penaltyForNode(pj);
-            double v1 = std::max(time_delta, 0.0);
-            if (v1 > 0) v1 += penalty;
-            double v2 = std::max(load_delta, 0.0);
-            if (v2 > 0) v2 += penalty;
-            double score = getScore(cost_delta, time_delta, load_delta, penalty);
+            double score = getScore(cost_delta, time_delta, load_delta);
 
             if (betterMove(res, score)) {
                 res.type = "INTRA_RELOCATE_" + std::to_string(len);
@@ -150,8 +134,8 @@ void Operator::_intraRelocate(Solution *solution, Route *route, int len, EvalRes
                     res.time_delta = time_delta;
                     res.load_delta = load_delta;
                     res.cost_value = cost_coef * cost_delta;
-                    res.time_value = data->dist_time_ratio * v1;
-                    res.load_value = data->std_dist_delta * v2 / data->capacity;
+                    res.time_value = time_coef * time_delta * data->dist_time_ratio;
+                    res.load_value = load_coef * data->std_dist_delta * load_delta / data->capacity;
                     res.cost_oi = route->cost;
                     res.time_oi = route->reverse_time;
                     res.load_oi = route->overload;
@@ -170,7 +154,7 @@ void Operator::_intraRelocate(Solution *solution, Route *route, int len, EvalRes
     }
 }
 
-void Operator::_intraSwap(Solution *solution, Route *route, int len_i, int len_j, EvalResult &res) {
+void Operator::_intraSwap(Solution *solution, Route *route, int len_i, int len_j, double objective_cost, EvalResult &res) {
     auto nodes = route->nodes;
     int size = nodes.size();
     auto indices = random->randomInts(size);
@@ -188,23 +172,17 @@ void Operator::_intraSwap(Solution *solution, Route *route, int len_i, int len_j
                 skip(route->id, prev_j->id, first_i->id) || skip(route->id, last_i->id, next_j->id)) continue;
             double dist5 = data->distances[prev_i->id][first_j->id], dist6 = data->distances[last_j->id][next_i->id], dist7 = data->distances[prev_j->id][first_i->id], dist8 = data->distances[last_i->id][next_j->id];
             double time_dist5 = data->time_distances[prev_i->id][first_j->id], time_dist6 = data->time_distances[last_j->id][next_i->id], time_dist7 = data->time_distances[prev_j->id][first_i->id], time_dist8 = data->time_distances[last_i->id][next_j->id];
-            // (0,i-1) (i,i+len_i-1) (i+len_i,j-1) (j,j+len_j-1) (j+len_j,end)
+
             EvalElem ee1 = EvalElem(route, 0, i-1), ee2 = EvalElem(route, i, i+len_i-1), ee3 = EvalElem(route, i+len_i, j-1), ee4 = EvalElem(route, j, j+len_j-1), ee5 = EvalElem(route, j+len_j, size);
             EvalElem ee = ee1.add(ee4, dist5, time_dist5).add(ee3, dist6, time_dist6).add(ee2, dist7, time_dist7).add(ee5, dist8, time_dist8);
             double overload = std::max(ee.max_load - data->capacity, 0.0);
             bool feasible = ee.reverse_time < PRECISION && overload < PRECISION;
 
             double cost_delta = ee.cost - route->cost;
+            if (exceedsObjectiveCost(solution, cost_delta, objective_cost)) continue;
             double time_delta = ee.reverse_time - route->reverse_time;
             double load_delta = overload - route->overload;
-            SuperNode sni(first_i, last_i, len_i);
-            SuperNode snj(first_j, last_j, len_j);
-            double penalty = penaltyForSuperNode(sni) + penaltyForSuperNode(snj);
-            double v1 = std::max(time_delta, 0.0);
-            if (v1 > 0) v1 += penalty;
-            double v2 = std::max(load_delta, 0.0);
-            if (v2 > 0) v2 += penalty;
-            double score = getScore(cost_delta, time_delta, load_delta, penalty);
+            double score = getScore(cost_delta, time_delta, load_delta);
 
             if (betterMove(res, score)) {
                 res.type = "INTRA_SWAP_" + std::to_string(len_i) + "_" + std::to_string(len_j);
@@ -219,8 +197,8 @@ void Operator::_intraSwap(Solution *solution, Route *route, int len_i, int len_j
                     res.time_delta = time_delta;
                     res.load_delta = load_delta;
                     res.cost_value = cost_coef * cost_delta;
-                    res.time_value = data->dist_time_ratio * v1;
-                    res.load_value = data->std_dist_delta * v2 / data->capacity;
+                    res.time_value = time_coef * time_delta * data->dist_time_ratio;
+                    res.load_value = load_coef * data->std_dist_delta * load_delta / data->capacity;
                     res.cost_oi = route->cost;
                     res.time_oi = route->reverse_time;
                     res.load_oi = route->overload;
@@ -239,7 +217,7 @@ void Operator::_intraSwap(Solution *solution, Route *route, int len_i, int len_j
     }
 }
 
-void Operator::_interRelocate(Solution *solution, Route *ri, Route *rj, int len, EvalResult &res) {
+void Operator::_interRelocate(Solution *solution, Route *ri, Route *rj, int len, double objective_cost, EvalResult &res) {
     auto nodes_i = ri->nodes;
     auto nodes_j = rj->nodes;
     int size_i = nodes_i.size(), size_j = nodes_j.size();
@@ -253,8 +231,6 @@ void Operator::_interRelocate(Solution *solution, Route *ri, Route *rj, int len,
             Node *first_i = nodes_i[i], *last_i = nodes_i[i+len-1], *pj = nodes_j[j];
             Node *prev_i = first_i->prev, *prev_j = pj->prev, *next_i = last_i->next, *next_j = pj->next;
             res.count++;
-            SuperNode sn(first_i, last_i, len);
-            if (isTabuSuperNode(sn, rj->id)) continue;
             if (skip(rj->id, pj->id, first_i->id) || skip(rj->id, last_i->id, next_j->id) ||
                 skip(ri->id, prev_i->id, next_i->id)) continue;
             double dist4 = data->distances[prev_i->id][next_i->id], dist5 = data->distances[pj->id][first_i->id], dist6 = data->distances[last_i->id][next_j->id];
@@ -267,24 +243,21 @@ void Operator::_interRelocate(Solution *solution, Route *ri, Route *rj, int len,
             double overload1 = std::max(ee1.max_load - data->capacity, 0.0);
             double overload2 = std::max(ee2.max_load - data->capacity, 0.0);
 
-            // filter infeasible
+
             bool feasible1 = ee1.reverse_time < PRECISION && overload1 < PRECISION;
             bool feasible2 = ee2.reverse_time < PRECISION && overload2 < PRECISION;
 
             double cost_delta1 = ee1.cost - ri->cost, cost_delta2 = ee2.cost - rj->cost;
             double cost_delta = cost_delta1 + cost_delta2;
+            int removed_routes = ri->size == len + 1 ? 1 : 0;
+            if (exceedsObjectiveCost(solution, cost_delta, objective_cost, removed_routes)) continue;
             double time_delta1 = ee1.reverse_time - ri->reverse_time;
             double time_delta2 = ee2.reverse_time - rj->reverse_time;
             double time_delta = time_delta1 + time_delta2;
             double load_delta1 = overload1 - ri->overload;
             double load_delta2 = overload2 - rj->overload;
             double load_delta = load_delta1 + load_delta2;
-            double penalty = penaltyForSuperNode(sn) + penaltyForNode(pj);
-            double v1 = std::max(time_delta, 0.0);
-            if (v1 > 0) v1 += penalty;
-            double v2 = std::max(load_delta, 0.0);
-            if (v2 > 0) v2 += penalty;
-            double score = getScore(cost_delta, time_delta, load_delta, penalty);
+            double score = getScore(cost_delta, time_delta, load_delta);
 
             if (betterMove(res, score)) {
                 res.type = "INTER_RELOCATE_" + std::to_string(len);
@@ -299,8 +272,8 @@ void Operator::_interRelocate(Solution *solution, Route *ri, Route *rj, int len,
                     res.time_delta = time_delta;
                     res.load_delta = load_delta;
                     res.cost_value = cost_coef * cost_delta;
-                    res.time_value = data->dist_time_ratio * v1;
-                    res.load_value = data->std_dist_delta * v2 / data->capacity;
+                    res.time_value = time_coef * time_delta * data->dist_time_ratio;
+                    res.load_value = load_coef * data->std_dist_delta * load_delta / data->capacity;
                     res.cost_oi = ri->cost;
                     res.cost_oj = rj->cost;
                     res.time_oi = ri->reverse_time;
@@ -319,7 +292,7 @@ void Operator::_interRelocate(Solution *solution, Route *ri, Route *rj, int len,
     }
 }
 
-void Operator::_interSwap(Solution *solution, Route *ri, Route *rj, int len_i, int len_j, EvalResult &res) {
+void Operator::_interSwap(Solution *solution, Route *ri, Route *rj, int len_i, int len_j, double objective_cost, EvalResult &res) {
     auto nodes_i = ri->nodes;
     auto nodes_j = rj->nodes;
     int size_i = nodes_i.size(), size_j = nodes_j.size();
@@ -335,9 +308,6 @@ void Operator::_interSwap(Solution *solution, Route *ri, Route *rj, int len_i, i
             res.count++;
             Node *first_i = nodes_i[i], *last_i = nodes_i[i+len_i-1], *first_j = nodes_j[j], *last_j = nodes_j[j+len_j-1];
             Node *prev_i = first_i->prev, *prev_j = first_j->prev, *next_i = last_i->next, *next_j = last_j->next;
-            SuperNode sni(first_i, last_i, len_i);
-            SuperNode snj(first_j, last_j, len_j);
-            if (isTabuSuperNode(sni, rj->id) || isTabuSuperNode(snj, ri->id)) continue;
             if (skip(ri->id, prev_i->id, first_j->id) || skip(ri->id, last_j->id, next_i->id) ||
                 skip(rj->id, prev_j->id, first_i->id) || skip(rj->id, last_i->id, next_j->id)) continue;
             double dist5 = data->distances[prev_i->id][first_j->id], dist6 = data->distances[last_j->id][next_i->id], dist7 = data->distances[prev_j->id][first_i->id], dist8 = data->distances[last_i->id][next_j->id];
@@ -349,24 +319,20 @@ void Operator::_interSwap(Solution *solution, Route *ri, Route *rj, int len_i, i
             double overload1 = std::max(ee1.max_load - data->capacity, 0.0);
             double overload2 = std::max(ee2.max_load - data->capacity, 0.0);
 
-            // filter infeasible
+
             bool feasible1 = ee1.reverse_time < PRECISION && overload1 < PRECISION;
             bool feasible2 = ee2.reverse_time < PRECISION && overload2 < PRECISION;
 
             double cost_delta1 = ee1.cost - ri->cost, cost_delta2 = ee2.cost - rj->cost;
             double cost_delta = cost_delta1 + cost_delta2;
+            if (exceedsObjectiveCost(solution, cost_delta, objective_cost)) continue;
             double time_delta1 = ee1.reverse_time - ri->reverse_time;
             double time_delta2 = ee2.reverse_time - rj->reverse_time;
             double time_delta = time_delta1 + time_delta2;
             double load_delta1 = overload1 - ri->overload;
             double load_delta2 = overload2 - rj->overload;
             double load_delta = load_delta1 + load_delta2;
-            double penalty = penaltyForSuperNode(sni) + penaltyForSuperNode(snj);
-            double v1 = std::max(time_delta, 0.0);
-            if (v1 > 0) v1 += penalty;
-            double v2 = std::max(load_delta, 0.0);
-            if (v2 > 0) v2 += penalty;
-            double score = getScore(cost_delta, time_delta, load_delta, penalty);
+            double score = getScore(cost_delta, time_delta, load_delta);
 
             if (betterMove(res, score)) {
                 res.type = "INTER_SWAP_" + std::to_string(len_i) + "_" + std::to_string(len_j);
@@ -381,8 +347,8 @@ void Operator::_interSwap(Solution *solution, Route *ri, Route *rj, int len_i, i
                     res.time_delta = time_delta;
                     res.load_delta = load_delta;
                     res.cost_value = cost_coef * cost_delta;
-                    res.time_value = data->dist_time_ratio * v1;
-                    res.load_value = data->std_dist_delta * v2 / data->capacity;
+                    res.time_value = time_coef * time_delta * data->dist_time_ratio;
+                    res.load_value = load_coef * data->std_dist_delta * load_delta / data->capacity;
                     res.cost_oi = ri->cost;
                     res.cost_oj = rj->cost;
                     res.time_oi = ri->reverse_time;
@@ -401,7 +367,7 @@ void Operator::_interSwap(Solution *solution, Route *ri, Route *rj, int len_i, i
     }
 }
 
-void Operator::_twoOptStar(Solution *solution, Route *ri, Route *rj, EvalResult &res) {
+void Operator::_twoOptStar(Solution *solution, Route *ri, Route *rj, double objective_cost, EvalResult &res) {
     auto nodes_i = ri->nodes;
     auto nodes_j = rj->nodes;
     int size_i = nodes_i.size(), size_j = nodes_j.size();
@@ -413,33 +379,29 @@ void Operator::_twoOptStar(Solution *solution, Route *ri, Route *rj, EvalResult 
             if (nodes_i[i]->next->id == 0 && nodes_j[j]->next->id == 0) continue;
             Node *pi = nodes_i[i], *pj = nodes_j[j];
             res.count++;
-            if (isTabuSegment(pi->next, ri->head, rj->id) || isTabuSegment(pj->next, rj->head, ri->id)) continue;
             if (skip(ri->id, pi->id, pj->next->id) || skip(rj->id, pj->id, pi->next->id)) continue;
             double dist3 = data->distances[pi->id][pj->next->id], dist4 = data->distances[pj->id][pi->next->id];
             double time_dist3 = data->time_distances[pi->id][pj->next->id], time_dist4 = data->time_distances[pj->id][pi->next->id];
-            // (0, i) (i+1, end) (0, j) (j+1, end)
+
             EvalElem eei1 = EvalElem(ri, 0, i), eei2 = EvalElem(ri, i+1, ri->size);
             EvalElem eej1 = EvalElem(rj, 0, j), eej2 = EvalElem(rj, j+1, rj->size);
             EvalElem ee1 = eei1.add(eej2, dist3, time_dist3), ee2 = eej1.add(eei2, dist4, time_dist4);
             double overload1 = std::max(ee1.max_load - data->capacity, 0.0);
             double overload2 = std::max(ee2.max_load - data->capacity, 0.0);
-            // filter infeasible
+
             bool feasible1 = ee1.reverse_time < PRECISION && overload1 < PRECISION;
             bool feasible2 = ee2.reverse_time < PRECISION && overload2 < PRECISION;
 
             double cost_delta = ee1.cost + ee2.cost - ri->cost - rj->cost;
+            int removed_routes = (i == 0 && j == size_j - 1) || (j == 0 && i == size_i - 1) ? 1 : 0;
+            if (exceedsObjectiveCost(solution, cost_delta, objective_cost, removed_routes)) continue;
             double time_delta1 = ee1.reverse_time - ri->reverse_time;
             double time_delta2 = ee2.reverse_time - rj->reverse_time;
             double time_delta = time_delta1 + time_delta2;
             double load_delta1 = overload1 - ri->overload;
             double load_delta2 = overload2 - rj->overload;
             double load_delta = load_delta1 + load_delta2;
-            double penalty = penaltyForNode(pi) + penaltyForNode(pj);
-            double v1 = std::max(time_delta, 0.0);
-            if (v1 > 0) v1 += penalty;
-            double v2 = std::max(load_delta, 0.0);
-            if (v2 > 0) v2 += penalty;
-            double score = getScore(cost_delta, time_delta, load_delta, penalty);
+            double score = getScore(cost_delta, time_delta, load_delta);
 
             if (betterMove(res, score)) {
                 res.type = "TWO_OPT_STAR";
@@ -454,8 +416,8 @@ void Operator::_twoOptStar(Solution *solution, Route *ri, Route *rj, EvalResult 
                     res.time_delta = time_delta;
                     res.load_delta = load_delta;
                     res.cost_value = cost_coef * cost_delta;
-                    res.time_value = data->dist_time_ratio * v1;
-                    res.load_value = data->std_dist_delta * v2 / data->capacity;
+                    res.time_value = time_coef * time_delta * data->dist_time_ratio;
+                    res.load_value = load_coef * data->std_dist_delta * load_delta / data->capacity;
                     res.cost_oi = ri->cost;
                     res.cost_oj = rj->cost;
                     res.time_oi = ri->reverse_time;
@@ -474,25 +436,25 @@ void Operator::_twoOptStar(Solution *solution, Route *ri, Route *rj, EvalResult 
     }
 }
 
-EvalResult Operator::relocate(Solution *solution, int len) {
+EvalResult Operator::relocate(Solution *solution, int len, double objective_cost) {
     EvalResult res;
     int r_size = solution->routes.size();
     std::vector<int> rids = random->randomInts(r_size);
-    // inter relocate
+
     if (r_size >= 2) {
         for (auto &i: rids) {
             for (auto &j: rids) {
                 if (i == j) continue;
-                _interRelocate(solution, solution->routes[i], solution->routes[j], len, res);
+                _interRelocate(solution, solution->routes[i], solution->routes[j], len, objective_cost, res);
                 if (res.done) break;
             }
             if (res.done) break;
         }
     }
-    // intra relocate
+
     if (!res.done) {
         for (auto &i: rids) {
-            _intraRelocate(solution, solution->routes[i], len, res);
+            _intraRelocate(solution, solution->routes[i], len, objective_cost, res);
         }
     }
     if (acceptMove(res)) {
@@ -502,29 +464,29 @@ EvalResult Operator::relocate(Solution *solution, int len) {
     return res;
 }
 
-EvalResult Operator::swap(Solution *solution, int len_i, int len_j) {
+EvalResult Operator::swap(Solution *solution, int len_i, int len_j, double objective_cost) {
     EvalResult res;
     int r_size = solution->routes.size();
     auto rids = random->randomInts(r_size);
-    // inter swap
+
     if (r_size >= 2) {
         for (auto &i: rids) {
             for (auto &j: rids) {
                 if (i == j || len_i == len_j && i > j) continue;
-                _interSwap(solution, solution->routes[i], solution->routes[j], len_i, len_j, res);
+                _interSwap(solution, solution->routes[i], solution->routes[j], len_i, len_j, objective_cost, res);
                 if (res.done) break;
             }
             if (res.done) break;
         }
     }
 
-    // intra swap
+
     if (!res.done) {
         for (auto &i: rids) {
-            _intraSwap(solution, solution->routes[i], len_i, len_j, res);
+            _intraSwap(solution, solution->routes[i], len_i, len_j, objective_cost, res);
             if (res.done) break;
             if (len_i != len_j) {
-                _intraSwap(solution, solution->routes[i], len_j, len_i, res);
+                _intraSwap(solution, solution->routes[i], len_j, len_i, objective_cost, res);
                 if (res.done) break;
             }
         }
@@ -537,7 +499,7 @@ EvalResult Operator::swap(Solution *solution, int len_i, int len_j) {
     return res;
 }
 
-EvalResult Operator::twoOptStar(Solution *solution) {
+EvalResult Operator::twoOptStar(Solution *solution, double objective_cost) {
     EvalResult res;
     int r_size = solution->routes.size();
     if (r_size < 2) return res;
@@ -546,12 +508,12 @@ EvalResult Operator::twoOptStar(Solution *solution) {
     for (auto &i : rids) {
         for (auto &j : rids) {
             if (i <= j) continue;
-            _twoOptStar(solution, solution->routes[i], solution->routes[j], res);
+            _twoOptStar(solution, solution->routes[i], solution->routes[j], objective_cost, res);
             if (res.done) break;
         }
         if (res.done) break;
     }
-    
+
     if (acceptMove(res)) {
         solution->twoOptStar(res.ri, res.rj, res.pi, res.pj);
         res.accepted = true;
@@ -559,112 +521,46 @@ EvalResult Operator::twoOptStar(Solution *solution) {
     return res;
 }
 
-EvalResult Operator::operate(Solution *solution, int operate) {
+EvalResult Operator::operate(Solution *solution, int operate, double objective_cost) {
     EvalResult res;
     switch (operate) {
         case RELOCATE_1:
-            res = relocate(solution, 1);
+            res = relocate(solution, 1, objective_cost);
             break;
         case RELOCATE_2:
-            res = relocate(solution, 2);
+            res = relocate(solution, 2, objective_cost);
             break;
         case RELOCATE_3:
-            res = relocate(solution, 3);
+            res = relocate(solution, 3, objective_cost);
             break;
         case SWAP_1_1:
-            res = swap(solution, 1, 1);
+            res = swap(solution, 1, 1, objective_cost);
             break;
         case SWAP_1_2:
-            res = swap(solution, 1, 2);
+            res = swap(solution, 1, 2, objective_cost);
             break;
         case SWAP_2_2:
-            res = swap(solution, 2, 2);
+            res = swap(solution, 2, 2, objective_cost);
             break;
         case SWAP_1_3:
-            res = swap(solution, 1, 3);
+            res = swap(solution, 1, 3, objective_cost);
             break;
         case SWAP_2_3:
-            res = swap(solution, 2, 3);
+            res = swap(solution, 2, 3, objective_cost);
             break;
         case SWAP_3_3:
-            res = swap(solution, 3, 3);
+            res = swap(solution, 3, 3, objective_cost);
             break;
         case TWO_OPT_STAR:
-            res = twoOptStar(solution);
+            res = twoOptStar(solution, objective_cost);
             break;
         default:
             break;
     }
-    updateTabuOnAccept(res);
     return res;
 }
 
-long long Operator::tabuKey(int node_id, int route_id) const {
-    return (static_cast<long long>(node_id) << 32) | static_cast<unsigned int>(route_id);
-}
-
-bool Operator::isTabuMove(int node_id, int route_id) const {
-    if (!tabu_enabled) return false;
-    auto it = tabu_until.find(tabuKey(node_id, route_id));
-    if (it == tabu_until.end()) return false;
-    return tabu_step < it->second;
-}
-
-bool Operator::isTabuSuperNode(const SuperNode &node, int route_id) const {
-    if (!tabu_enabled || node.first == nullptr) return false;
-    Node *p = node.first;
-    for (int i = 0; i < node.len; ++i) {
-        if (isTabuMove(p->id, route_id)) return true;
-        p = p->next;
-    }
-    return false;
-}
-
-bool Operator::isTabuSegment(Node *start, Node *head, int route_id) const {
-    if (!tabu_enabled || start == nullptr || head == nullptr) return false;
-    Node *p = start;
-    while (p != head) {
-        if (isTabuMove(p->id, route_id)) return true;
-        p = p->next;
-    }
-    return false;
-}
-
-void Operator::setTabuSuperNode(const SuperNode &node, int route_id) {
-    if (!tabu_enabled || node.first == nullptr) return;
-    int tenure = random->randomInt(tabu_tenure_max) + 1;
-    Node *p = node.first;
-    for (int i = 0; i < node.len; ++i) {
-        tabu_until[tabuKey(p->id, route_id)] = tabu_step + tenure;
-        p = p->next;
-    }
-}
-
-void Operator::setTabuSegment(Node *start, Node *head, int route_id) {
-    if (!tabu_enabled || start == nullptr || head == nullptr) return;
-    int tenure = random->randomInt(tabu_tenure_max) + 1;
-    Node *p = start;
-    while (p != head) {
-        tabu_until[tabuKey(p->id, route_id)] = tabu_step + tenure;
-        p = p->next;
-    }
-}
-
-void Operator::updateTabuOnAccept(const EvalResult &res) {
-    if (!tabu_enabled || !res.accepted) return;
-    tabu_step++;
-    if (res.ri == nullptr || res.rj == nullptr) return;
-
-    if (res.type.rfind("INTER_RELOCATE", 0) == 0) {
-        if (res.spi.first == nullptr) return;
-        setTabuSuperNode(res.spi, res.ri->id);
-    } else if (res.type.rfind("INTER_SWAP", 0) == 0) {
-        if (res.spi.first == nullptr || res.spj.first == nullptr) return;
-        setTabuSuperNode(res.spi, res.ri->id);
-        setTabuSuperNode(res.spj, res.rj->id);
-    } else if (res.type == "TWO_OPT_STAR") {
-        if (res.pi == nullptr || res.pj == nullptr) return;
-        setTabuSegment(res.pi->next, res.ri->head, res.ri->id);
-        setTabuSegment(res.pj->next, res.rj->head, res.rj->id);
-    }
+void Operator::printCoefs() const {
+    printf("cost_coef: %.4f, time_coef: %.4f, load_coef: %.4f\n", cost_coef, time_coef, load_coef);
+    return;
 }

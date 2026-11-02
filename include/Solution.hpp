@@ -1,8 +1,8 @@
-/**
- * Solution.hpp
- * created on : August 2023
- * author : Z.LEI
- **/
+
+
+
+
+
 
 #ifndef MA_FIRD_SOLUTION_HPP
 #define MA_FIRD_SOLUTION_HPP
@@ -25,7 +25,6 @@ private:
     static Parameters *params;
     static Data *data;
     Insertion insertor;
-    void insertByRCRS(std::vector<Node*> &nodes);
 public:
     double cost = 0;
     double total_cost = 0;
@@ -48,11 +47,10 @@ public:
     void decreaseRoute();
     void insertion(std::vector<Node*> &nodes, int opt);
     void RCRS();
-    void removeLeastViolationsAndReinsert(double ratio);
     void relocate(Route* &r1, Route* &r2, SuperNode &node1, Node *node2);
     void swap(Route* &r1, Route* &r2, SuperNode &node1, SuperNode &node2);
     void twoOptStar(Route* &r1, Route* &r2, Node* node1, Node* node2);
 };
 
 
-#endif //MA_FIRD_SOLUTION_HPP
+#endif

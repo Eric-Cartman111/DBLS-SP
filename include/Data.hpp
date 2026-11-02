@@ -1,8 +1,8 @@
-/**
- * Data.hpp
- * created on : August 2023
- * author : Z.LEI
- **/
+
+
+
+
+
 
 #ifndef MA_FIRD_DATA_HPP
 #define MA_FIRD_DATA_HPP
@@ -41,19 +41,13 @@ public:
     double dist_time_ratio = 0;
     DataNode depot;
     std::vector<DataNode> nodes;
-    std::vector<std::vector<double>> distances;             // distance matrix
-    std::vector<std::vector<double>> time_distances;        // time distance matrix
-    std::vector<std::vector<bool>> feasibility_matrix;      // feasibility matrix
-    std::vector<int> violation_counts;                      // per-customer violation counts
-    std::vector<double> penalty_values;                     // per-customer penalty values
+    std::vector<std::vector<double>> distances;
+    std::vector<std::vector<double>> time_distances;
+    std::vector<std::vector<bool>> feasibility_matrix;
     Data(Parameters *_params);
     Data() = default;
     ~Data() = default;
     void read();
-    void resetPenalties();
-    void resetViolationCounts();
-    void recordViolation(int id);
-    double penaltyFor(int id) const;
 };
 
-#endif //MA_FIRD_DATA_HPP
+#endif

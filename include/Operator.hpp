@@ -1,15 +1,14 @@
-/**
- * Operator.hpp
- * created on : August 2023
- * author : Z.LEI
- **/
+
+
+
+
+
 
 #ifndef MA_FIRD_OPERATOR_HPP
 #define MA_FIRD_OPERATOR_HPP
 
 #include "Solution.hpp"
 #include "Evaluation.hpp"
-#include <unordered_map>
 
 enum Neighborhood {
     RELOCATE_1, RELOCATE_2, RELOCATE_3,
@@ -25,31 +24,20 @@ private:
     static Data *data;
     double w0 = 1, w1 = 1, w2 = 1;
     double cost_coef = 1, time_coef = 1, load_coef = 1;
+    double repair_cost_factor = 0.1;
     double adjust_factor = 0.5;
     double min_pr = 0.1;
     double max_pr = 1e4;
-    bool tabu_enabled = false;
-    int tabu_tenure_max = 10;
-    int tabu_step = 0;
-    std::unordered_map<long long, int> tabu_until;
-    EvalResult relocate(Solution *solution, int len);
-    EvalResult swap(Solution *solution, int len_i, int len_j);
-    EvalResult twoOptStar(Solution *solution);
-    void _intraRelocate(Solution *solution, Route *route, int len, EvalResult &res);
-    void _intraSwap(Solution *solution, Route *route, int len_i, int len_j, EvalResult &res);
-    void _interRelocate(Solution *solution, Route *ri, Route *rj, int len, EvalResult &res);
-    void _interSwap(Solution *solution, Route *ri, Route *rj, int len_i, int len_j, EvalResult &res);
-    void _twoOptStar(Solution *solution, Route *ri, Route *rj, EvalResult &res);
-    double getScore(double cost_delta, double time_delta, double load_delta, double penalty) const;
-    double penaltyForNode(Node *node) const;
-    double penaltyForSuperNode(const SuperNode &node) const;
-    long long tabuKey(int node_id, int route_id) const;
-    bool isTabuMove(int node_id, int route_id) const;
-    bool isTabuSuperNode(const SuperNode &node, int route_id) const;
-    bool isTabuSegment(Node *start, Node *head, int route_id) const;
-    void setTabuSuperNode(const SuperNode &node, int route_id);
-    void setTabuSegment(Node *start, Node *head, int route_id);
-    void updateTabuOnAccept(const EvalResult &res);
+    EvalResult relocate(Solution *solution, int len, double objective_cost);
+    EvalResult swap(Solution *solution, int len_i, int len_j, double objective_cost);
+    EvalResult twoOptStar(Solution *solution, double objective_cost);
+    void _intraRelocate(Solution *solution, Route *route, int len, double objective_cost, EvalResult &res);
+    void _intraSwap(Solution *solution, Route *route, int len_i, int len_j, double objective_cost, EvalResult &res);
+    void _interRelocate(Solution *solution, Route *ri, Route *rj, int len, double objective_cost, EvalResult &res);
+    void _interSwap(Solution *solution, Route *ri, Route *rj, int len_i, int len_j, double objective_cost, EvalResult &res);
+    void _twoOptStar(Solution *solution, Route *ri, Route *rj, double objective_cost, EvalResult &res);
+    double getScore(double cost_delta, double time_delta, double load_delta) const;
+    static bool exceedsObjectiveCost(Solution *solution, double cost_delta, double objective_cost, int removed_routes = 0);
     static bool acceptMove(EvalResult &res) ;
     static bool betterMove(EvalResult &res, double score);
     static bool skip(int rid, int id1, int id2);
@@ -58,8 +46,10 @@ public:
     ~Operator() = default;
     static void setContext(Random *_random, Parameters *_params, Data *_data);
     void init(bool flag);
+    void updateScoreBalance(Solution *solution, int round, int stagnation, int patience);
     void update(Solution *solution);
-    EvalResult operate(Solution *solution, int opt_type);
+    EvalResult operate(Solution *solution, int opt_type, double objective_cost);
+    void printCoefs() const;
 };
 
-#endif //MA_FIRD_OPERATOR_HPP
+#endif

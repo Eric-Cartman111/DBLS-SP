@@ -1,8 +1,8 @@
-/**
- * RLAgent.hpp
- * created on : August 2023
- * author : Z.LEI
- **/
+
+
+
+
+
 
 #ifndef MA_FIRD_RLAGENT_HPP
 #define MA_FIRD_RLAGENT_HPP
@@ -31,4 +31,4 @@ public:
 };
 
 
-#endif //MA_FIRD_RLAGENT_HPP
+#endif

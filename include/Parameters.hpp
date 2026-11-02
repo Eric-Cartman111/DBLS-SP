@@ -1,8 +1,8 @@
-/**
- * Parameters.hpp
- * created on : August 2023
- * author : Z.LEI
- **/
+
+
+
+
+
 
 #ifndef MA_FIRD_PARAMETERS_HPP
 #define MA_FIRD_PARAMETERS_HPP
@@ -32,8 +32,11 @@ public:
     int population_size;
     double fit_coef;
     double adjust_factor;
-    bool enable_tabu;
-    int tabu_tenure_max;
+    bool repair_score;
+    bool mab_ratio;
+    bool ejection_insertion;
+    bool vla_archive;
+    bool qf_nnr;
     Parameters(int argc, char **argv);
     Parameters() = default;
     ~Parameters() = default;
@@ -41,4 +44,4 @@ public:
 };
 
 
-#endif //MA_FIRD_PARAMETERS_HPP
+#endif

@@ -1,8 +1,8 @@
-/**
- * Route.hpp
- * created on : August 2023
- * author : Z.LEI
- **/
+
+
+
+
+
 
 #ifndef MA_FIRD_ROUTE_HPP
 #define MA_FIRD_ROUTE_HPP
@@ -41,11 +41,11 @@ public:
     void update();
     void updateMatrix();
     void print() const;
-    void insert(Node* node);                // insert node at the end of the route
-    void insert(Node* pos, Node* node);     // insert node after pos
+    void insert(Node* node);
+    void insert(Node* pos, Node* node);
     void insert(Node* prev, Node *next, SuperNode &node);
-    void remove(Node *pos);                 // remove node at pos
-    void remove(SuperNode &node);           // remove supernode
+    void remove(Node *pos);
+    void remove(SuperNode &node);
 };
 
-#endif //MA_FIRD_ROUTE_HPP
+#endif

@@ -1,8 +1,8 @@
-/**
- * Generator.hpp
- * created on : August 2023
- * author : Z.LEI
- **/
+
+
+
+
+
 
 
 #ifndef MA_FIRD_GENERATOR_HPP
@@ -20,11 +20,13 @@ private:
     static Random *random;
     static Parameters *params;
     static Data *data;
-    RLAgent parent_agent, insert_agent;
+    RLAgent parent_agent, insert_agent, ratio_agent;
     int n_parents = 2;
     int max_parents_num = 10;
     int insert_opt = 0;
+    int ratio_opt = 0;
     double ratio = 0.9;
+    const std::vector<double> ratio_values {0.1, 0.3, 0.5, 0.7, 0.9};
     int step = 0;
     double abs_sum_reward = 0;
     Solution* ARIX(const std::vector<Solution*>& parents);
@@ -39,4 +41,4 @@ public:
 };
 
 
-#endif //MA_FIRD_GENERATOR_HPP
+#endif
