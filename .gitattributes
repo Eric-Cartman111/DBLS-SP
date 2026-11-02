@@ -1,0 +1,3 @@
+datasets/**/*.txt text eol=lf
+datasets/**/*.vrpsdptw text eol=lf
+datasets/*.csv text eol=lf

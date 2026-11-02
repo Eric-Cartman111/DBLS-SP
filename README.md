@@ -4,12 +4,13 @@ C++ implementation associated with **DBLS-SP: A Dynamic Balanced Local Search wi
 
 Paper: <https://doi.org/10.3390/math14152781>
 
-DBLS-SP solves the vehicle routing problem with simultaneous pickup and delivery and time windows (VRPSPDTW). This release contains all source files supplied in the author's local `DBLS-SP_code` directory. Benchmark datasets, original experiment logs, and result files are not included.
+DBLS-SP solves the vehicle routing problem with simultaneous pickup and delivery and time windows (VRPSPDTW). This release contains all source files supplied in the author's local `DBLS-SP_code` directory and all 88 configured WC/JD benchmark instances. Original experiment logs and result files are not included.
 
 ## Contents
 
 - `include/`: headers, configuration, and bundled command-line parser.
 - `src/`: algorithm, solution pool, local search, insertion, evaluation, and data readers.
+- `datasets/`: 68 WC and 20 JD instances, source attribution, upstream license, and checksum manifest.
 - `CMakeLists.txt`: C++17 build configuration.
 - `LICENSE`: existing MIT license and original copyright notice.
 
@@ -53,7 +54,7 @@ With a Visual Studio multi-configuration generator, the executable is normally `
 
 ## Benchmark data
 
-Obtain WC and JD instances separately. The previous MA-FIRD README points to the [WC benchmark page](https://oz.nthu.edu.tw/~d933810/test.htm) and the [JD / VRPenstein repository](https://github.com/senshineL/VRPenstein). These are external sources; datasets are not redistributed here.
+All configured WC and JD instances are included in `datasets/`, so no separate download is needed. They were imported from the public [VRPenstein benchmark archive](https://github.com/senshineL/VRPenstein/tree/c912c57aa387d31c20c036f11d0bca3c69ce93da/data). See [datasets/README.md](datasets/README.md) for provenance, processing, upstream license, and checksums. Only line endings were normalized; numerical contents were preserved.
 
 ```text
 datasets/
